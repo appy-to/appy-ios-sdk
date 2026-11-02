@@ -95,6 +95,8 @@ targets: [
 ]
 ```
 
+Maintainers can verify the public SPM tag in a fresh consumer with `scripts/verify-spm.sh 1.0.0` on a Mac with Xcode. This resolves the GitHub dependency and compiles it for macOS and the iOS simulator; it does not exercise live attribution or device routing.
+
 For CocoaPods, add to your app target and run `pod install`:
 
 ```ruby
