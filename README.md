@@ -2,7 +2,9 @@
 
 ![Appy — Deep links, install attribution and revenue analytics](docs/assets/appy-banner.svg)
 
-**[Start here: short installation guide](QUICKSTART.md)** · [Full documentation](https://appy.to/docs/sdk/ios)
+**[Start here: short installation guide](QUICKSTART.md)** · [Which names and values do I replace?](SETUP.md)
+
+**This is a library for your own app.** Keep the `Appy` SDK/package names in code; use your own app name, identifiers, publishable key and link domain. [Get those values from the dashboard](SETUP.md).
 
 The Appy iOS SDK connects your app to [Appy](https://appy.to) smart links:
 
@@ -16,7 +18,6 @@ Building with Flutter or React Native? Use the [Flutter plugin](https://appy.to/
 
 ## Contents
 
-- [Lightweight by design](#lightweight-by-design)
 - [Requirements and installation](#requirements-and-installation)
 - [1. Register your app with Appy](#1-register-your-app-with-appy)
 - [2. Enable Associated Domains](#2-enable-associated-domains)
@@ -31,20 +32,9 @@ Building with Flutter or React Native? Use the [Flutter plugin](https://appy.to/
 - [11. Privacy and opt-out](#11-privacy-and-opt-out)
 - [12. Build share links](#12-build-share-links)
 - [13. Debugging](#13-debugging)
+- [Lightweight by design](#lightweight-by-design)
 - [API reference](#api-reference)
 - [For maintainers: publishing](#for-maintainers-publishing)
-
-## Lightweight by design
-
-| | |
-|---|---|
-| Source | 940 non-blank lines of Swift in 7 files |
-| Dependencies | None. Foundation, UIKit and `os` only |
-| Binary size | About 161 KB of code and data in a stripped Release app (arm64), measured by linking a minimal app with and without the SDK. The prelinked `AppySDK.o` of a Release build is 549 KB, most of it symbol data that does not ship. |
-| Requests | One `POST /v1/sdk/open` per launch, plus one per Appy link opened later. Events go in batches of up to 100 events and 256 KB, never before the launch open has finished, one request at a time. |
-| Storage | Five keys in the `to.appy.sdk` user defaults suite, and one JSON file with at most 1,000 queued events |
-| Threads | One private serial queue; nothing touches the network on the main thread. Callbacks arrive on the main thread. |
-| Privacy | No IDFA, no AdSupport or AppTrackingTransparency, no pasteboard access, no cookies. Ships a privacy manifest. |
 
 ## Requirements and installation
 
@@ -79,46 +69,35 @@ pod 'AppySDK', :git => 'https://github.com/appy-to/appy-ios-sdk.git', :tag => '1
 
 ## 1. Register your app with Appy
 
-Appy needs to know which iOS app belongs to your links. It uses that to publish the Apple App Site Association (AASA) file for your link domain and to resolve links for your app. Register the app once, either under **Apps & SDK** in the Appy dashboard or by calling `POST /v1/apps` with a secret API key from your Appy account. Registering apps and using the SDK endpoints are part of the Enterprise plan; keys on other plans receive `403 plan_required`. With the app's App Store Connect provider token (`ios.providerToken`), Appy also adds campaign parameters to App Store links so App Store Connect reports downloads per Appy link.
+Open **Apps & SDK → New app** in the [Appy dashboard](https://appy.to). Use your own app's name, choose its link subdomain, enable iOS, and enter:
 
-| Value | Where to find it |
-|---|---|
-| Apple Team ID | Apple Developer account > Membership details, a 10-character identifier such as `ABCDE12345`. It must be the team that signs your app. |
-| Bundle ID | Xcode > your app target > General > Bundle Identifier, for example `com.acme.shop`. |
-| Subdomain | Your choice of 3-32 lowercase letters, digits and hyphens. It becomes your link domain, `<subdomain>.appy.to`, and cannot be changed later. |
+| Field | Where to find your value |
+| --- | --- |
+| Team ID | Apple Developer account → Membership details; use the team that signs your app |
+| Bundle ID | Xcode → your app target → General → Bundle Identifier |
 
-```bash
-curl https://api.appy.to/v1/apps \
-  -H "Authorization: Bearer $APPY_SECRET_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-        "name": "Acme Shop",
-        "subdomain": "acme",
-        "ios": { "teamId": "ABCDE12345", "bundleId": "com.acme.shop" }
-      }'
-```
+Select **Register app**. On that app's page, open **SDK setup** and copy its **Publishable key** and **Link domain**. If your product also runs on Android, add Android to the same dashboard app.
 
-The full schema is in the API reference at `https://api.appy.to/docs`. If the same app also ships on Android, register both platforms on one app; see the Android SDK guide. The response contains the two values the SDK needs:
+In the code below, replace `YOUR_PUBLISHABLE_KEY` with the entire copied key and `your-app.appy.to` with the copied domain. Keep names such as `Appy.configure` and `AppyConfiguration`: they are the library API, not the name of your app. [See the value-by-value explanation](SETUP.md).
 
-- **Publishable key**, starting with `appy_pk_`. It works only with the SDK endpoints and is safe to ship in the app. Never put a secret key (`appy_sk_…`) in an app.
-- **Link domain**, `<subdomain>.appy.to`, for example `acme.appy.to`. Appy serves your AASA file at `https://acme.appy.to/.well-known/apple-app-site-association`, listing `ABCDE12345.com.acme.shop`.
+Appy creates the domain-verification file for you. The next step tells iOS which domain belongs to your app. No `curl` command or secret API key is needed for this flow. Server-side registration automation is documented separately in the [developer API reference](https://api.appy.to/docs).
 
 ## 2. Enable Associated Domains
 
-In Xcode, open your target's **Signing & Capabilities**, add **Associated Domains**, and enter `applinks:acme.appy.to` with your own link domain:
+In Xcode, open your target's **Signing & Capabilities**, add **Associated Domains**, and enter `applinks:your-app.appy.to` with your own link domain:
 
 ```xml
 <key>com.apple.developer.associated-domains</key>
 <array>
-    <string>applinks:acme.appy.to</string>
+    <string>applinks:your-app.appy.to</string>
 </array>
 ```
 
-Devices download the AASA file through Apple's CDN, which can lag behind by up to a day. While developing, add a second entry, `applinks:acme.appy.to?mode=developer`. A development-signed build then fetches the file straight from Appy on a device where **Settings > Developer > Associated Domains Development** is on. Other builds use the regular entry, so keep both.
+Devices download the AASA file through Apple's CDN, which can lag behind by up to a day. While developing, add a second entry, `applinks:your-app.appy.to?mode=developer`. A development-signed build then fetches the file straight from Appy on a device where **Settings > Developer > Associated Domains Development** is on. Other builds use the regular entry, so keep both.
 
 ## 3. Add a custom URL scheme
 
-In-app browsers (Instagram, Facebook, TikTok, many mail apps) often ignore Universal Links. The Appy redirect page then tries the link's deep link, such as `acme://items/42`, before falling back to the store. Register the scheme under your target's **Info > URL Types**, for example with identifier `com.acme.shop` and URL scheme `acme`.
+In-app browsers (Instagram, Facebook, TikTok, many mail apps) often ignore Universal Links. The Appy redirect page then tries the link's deep link, such as `yourapp://items/42`, before falling back to the store. Register the scheme under your target's **Info > URL Types**, for example with identifier `com.example.yourapp` and URL scheme `yourapp`.
 
 Appy appends `appy_click_id` to the custom-scheme URLs it opens. The SDK treats any URL with that parameter as an Appy link. `handle(url:)` returns `false` for your own custom-scheme URLs, so they reach your router untouched.
 
@@ -129,7 +108,7 @@ Configure once, as early as possible: in `application(_:didFinishLaunchingWithOp
 ```swift
 import AppySDK
 
-var configuration = AppyConfiguration(publishableKey: "appy_pk_live_…", linkDomains: ["acme.appy.to"])
+var configuration = AppyConfiguration(publishableKey: "YOUR_PUBLISHABLE_KEY", linkDomains: ["your-app.appy.to"])
 #if DEBUG
 configuration.logLevel = .debug
 #endif
@@ -144,7 +123,7 @@ Appy.shared.onDeepLink = { result in
 | Property | Default | Meaning |
 |---|---|---|
 | `publishableKey` | required | Your `appy_pk_…` key. A key with any other prefix is logged as an error. Only the first 12 characters are ever logged. |
-| `linkDomains` | `[]` | Hosts of your Appy links, matched case-insensitively. The first one is used by `link(slug:parameters:)`. Values like `https://acme.appy.to/` and `applinks:acme.appy.to` are normalized to the host. |
+| `linkDomains` | `[]` | Hosts of your Appy links, matched case-insensitively. The first one is used by `link(slug:parameters:)`. Values like `https://your-app.appy.to/` and `applinks:your-app.appy.to` are normalized to the host. |
 | `emailLinkDomains` | `[]` | Click-tracking domains of your email tool that open the app. See [Links in marketing email](#links-in-marketing-email). |
 | `openDeferredDeepLinks` | `false` | When `true`, the SDK also opens a deferred link's `deeplinkURL` for you. See [Let the SDK open the link](#let-the-sdk-open-the-link). |
 | `deferredDeepLinkTimeout` | `5` s | How long the first launch waits for Appy's answer before `onDeepLink` receives `.failed(.timeout)`. Zero, negative and non-finite values use 5 s. |
@@ -193,13 +172,13 @@ func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>)
 
 ```swift
 @main
-struct AcmeApp: App {
+struct YourApp: App {
     @StateObject private var router: DeepLinkRouter
 
     init() {
         let router = DeepLinkRouter()
         _router = StateObject(wrappedValue: router)
-        Appy.configure(AppyConfiguration(publishableKey: "appy_pk_live_…", linkDomains: ["acme.appy.to"]))
+        Appy.configure(AppyConfiguration(publishableKey: "YOUR_PUBLISHABLE_KEY", linkDomains: ["your-app.appy.to"]))
         Appy.shared.onDeepLink = { router.handle($0) }
     }
 
@@ -233,8 +212,8 @@ func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive respo
 Email tools wrap every link in a click-tracking URL on their own domain. When that domain serves an `apple-app-site-association` file for your app, a tap opens the app with the tracking URL, not with your link. List the domain in `emailLinkDomains`, add `applinks:` for it to Associated Domains, and keep passing URLs to `handle`:
 
 ```swift
-var configuration = AppyConfiguration(publishableKey: "appy_pk_live_…", linkDomains: ["acme.appy.to"])
-configuration.emailLinkDomains = ["links.acme.com"]
+var configuration = AppyConfiguration(publishableKey: "YOUR_PUBLISHABLE_KEY", linkDomains: ["your-app.appy.to"])
+configuration.emailLinkDomains = ["links.example.com"]
 Appy.configure(configuration)
 ```
 
@@ -275,8 +254,8 @@ An `AppyDeepLink` has:
 
 | Property | Meaning |
 |---|---|
-| `url` | The Appy link, for example `https://acme.appy.to/spring?item=42` |
-| `deeplinkURL` | The in-app destination set on the link, for example `acme://items?item=42` |
+| `url` | The Appy link, for example `https://your-app.appy.to/spring?item=42` |
+| `deeplinkURL` | The in-app destination set on the link, for example `yourapp://items?item=42` |
 | `slug` | The link's slug, for example `spring` |
 | `parameters` | The link's query parameters, including any `utm_*`. Keys starting with `appy_` are reserved and never included. |
 | `isDeferred` | `true` when the link was tapped before the app was installed |
@@ -309,7 +288,7 @@ final class DeepLinkRouter: ObservableObject {
 ```swift
 func application(_ application: UIApplication,
                  didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    Appy.configure(AppyConfiguration(publishableKey: "appy_pk_live_…", linkDomains: ["acme.appy.to"]))
+    Appy.configure(AppyConfiguration(publishableKey: "YOUR_PUBLISHABLE_KEY", linkDomains: ["your-app.appy.to"]))
     Appy.shared.onDeepLink = { result in
         switch result {
         case .found(let link):
@@ -345,7 +324,7 @@ Deferred links on iOS work best when the app is installed and opened soon after 
 With `openDeferredDeepLinks = true`, the SDK calls `onDeepLink` and then opens the deferred link's `deeplinkURL` with `UIApplication.open`. Your app receives it like any other URL, through `application(_:open:options:)`, `scene(_:openURLContexts:)` or `onOpenURL`, so an app that already routes its own URL scheme needs no extra code.
 
 ```swift
-var configuration = AppyConfiguration(publishableKey: "appy_pk_live_…", linkDomains: ["acme.appy.to"])
+var configuration = AppyConfiguration(publishableKey: "YOUR_PUBLISHABLE_KEY", linkDomains: ["your-app.appy.to"])
 configuration.openDeferredDeepLinks = true
 Appy.configure(configuration)
 ```
@@ -528,7 +507,7 @@ To erase one user's installs and events, call `DELETE /v1/apps/{appId}/installs?
 let url = Appy.shared.link(slug: "spring", parameters: ["item": "42", "ref": referralCode])
 ```
 
-This returns `https://acme.appy.to/spring?item=42&ref=…`:
+This returns `https://your-app.appy.to/spring?item=42&ref=…`:
 
 - the host is the first link domain;
 - the slug is lowercased and must match `^[a-z0-9-]{1,64}$`;
@@ -554,11 +533,11 @@ In Console.app, filter on `subsystem:to.appy.sdk` and turn on **Include Info Mes
 Check the association file, and what Apple's CDN serves to devices:
 
 ```bash
-curl -i https://acme.appy.to/.well-known/apple-app-site-association
-curl -i https://app-site-association.cdn-apple.com/a/v1/acme.appy.to
+curl -i https://your-app.appy.to/.well-known/apple-app-site-association
+curl -i https://app-site-association.cdn-apple.com/a/v1/your-app.appy.to
 ```
 
-Expect `200`, JSON, no redirect, and `ABCDE12345.com.acme.shop` in the `applinks` section. **Settings > Developer > Universal Links > Diagnostics** tests a URL on a device. `xcrun simctl openurl booted https://acme.appy.to/spring` opens one in the Simulator.
+Expect `200`, JSON, no redirect, and `YOUR_APPLE_TEAM_ID.com.example.yourapp` in the `applinks` section. **Settings > Developer > Universal Links > Diagnostics** tests a URL on a device. `xcrun simctl openurl booted https://your-app.appy.to/spring` opens one in the Simulator.
 
 **Common pitfalls:**
 
@@ -581,6 +560,12 @@ Expect `200`, JSON, no redirect, and `ABCDE12345.com.acme.shop` in the `applinks
 Every install gets a new random install ID, so there is no test device to register and nothing to reset in Appy. To test again, repeat the same steps; each tap is a new click.
 
 With `configuration.logLevel = .debug`, the console shows Appy's answer: `Opening session (firstLaunch true, url none)`, then `The install is attributed to spring.`, and `onDeepLink` receives `.found`.
+
+## Lightweight by design
+
+The SDK uses Apple platform frameworks and has no external Swift package dependencies. Network requests and queued events are handled away from the main thread; link callbacks arrive on the main thread. The package includes its privacy manifest.
+
+For the data your app sends and the consent controls available to you, see [Privacy and opt-out](#11-privacy-and-opt-out). Implementation details and size measurements are not needed to follow the setup above.
 
 ## API reference
 
