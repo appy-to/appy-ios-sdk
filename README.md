@@ -2,21 +2,53 @@
 
 ![Appy — Deep links, install attribution and revenue analytics](docs/assets/appy-banner.svg)
 
-**[Start here: short installation guide](QUICKSTART.md)** · [Which names and values do I replace?](SETUP.md)
+Deep links, install attribution and in-app events for your iOS app.
 
-**This is a library for your own app.** Keep the `Appy` SDK/package names in code; use your own app name, identifiers, publishable key and link domain. [Get those values from the dashboard](SETUP.md).
+**1.0.0** · iOS 13+ · Swift 5.9+ · [MIT](LICENSE)
 
-The Appy iOS SDK connects your app to [Appy](https://appy.to) smart links:
+[Step-by-step setup](QUICKSTART.md) · [Your dashboard values](SETUP.md) · [API reference](#api-reference) · [Support](mailto:support@appy.to)
 
-- **Deep links.** Universal Links on your Appy link domain, and custom-scheme links opened by the Appy redirect page, reach your app as an `AppyDeepLink` with the slug, the in-app destination and the link's parameters.
-- **Deferred deep links.** A link tapped before the app was installed is delivered on the first launch after install, through the same callback.
-- **Install attribution.** The first launch tells you which link brought the install, with its campaign parameters, or that the install was organic.
-- **Events.** In-app events, optionally with revenue, credited to the link that brought the install.
-- **Share links.** `https://<your-domain>/<slug>?…` URLs for links in your Appy account.
+## Quick start
 
-Building with Flutter or React Native? Use the [Flutter plugin](https://appy.to/docs/sdk/flutter) or [react-native-appy](https://appy.to/docs/sdk/react-native), which wrap this SDK. For anything else, the SDK is a thin client over two HTTP endpoints: [use the API directly](https://appy.to/docs/sdk/http).
+### 1. Get your app's key and domain
 
-## Contents
+In the [Appy dashboard](https://appy.to), open **Apps & SDK → New app**. Register your own app, then copy **Publishable key** and **Link domain** from **SDK setup**. The hosted SDK features require an Enterprise plan.
+
+Replace `YOUR_PUBLISHABLE_KEY` and `your-app.appy.to` below with those two values. Keep the SDK/package names as written. [Help finding your values](SETUP.md).
+
+### 2. Install
+
+In Xcode, choose **File → Add Package Dependencies…**, enter the URL below, select `1.0.0` or later within major version 1, and add **AppySDK** to your app target.
+
+```text
+https://github.com/appy-to/appy-ios-sdk.git
+```
+
+### 3. Configure and connect links
+
+Add `import AppySDK` at the top of your Swift file. Run this once during app startup:
+
+```swift
+Appy.configure(AppyConfiguration(
+    publishableKey: "YOUR_PUBLISHABLE_KEY",
+    linkDomains: ["your-app.appy.to"]
+))
+```
+
+Finish the required iOS setup: [enable Associated Domains](#2-enable-associated-domains), then [forward incoming URLs and handle the result](#5-pass-incoming-links-to-the-sdk).
+
+### 4. Test your first link
+
+Create a link for this dashboard app, install the matching app build and tap the link. Confirm that your deep-link handler receives it before testing fresh installs or adding event tracking. [Follow the complete walkthrough](QUICKSTART.md).
+
+---
+
+## Detailed guide
+
+The sections below cover platform settings, callbacks, events, consent, troubleshooting and the API. Start here when you need a specific integration detail.
+
+<details>
+<summary>Browse the detailed guide</summary>
 
 - [Requirements and installation](#requirements-and-installation)
 - [1. Register your app with Appy](#1-register-your-app-with-appy)
@@ -35,6 +67,8 @@ Building with Flutter or React Native? Use the [Flutter plugin](https://appy.to/
 - [Lightweight by design](#lightweight-by-design)
 - [API reference](#api-reference)
 - [For maintainers: publishing](#for-maintainers-publishing)
+
+</details>
 
 ## Requirements and installation
 
